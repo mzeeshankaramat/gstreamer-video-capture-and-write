@@ -4,14 +4,19 @@
 
 int main(int argc, char *argv[])
 {
+    QApplication app(argc, argv);
+    QLabel label;
+    label.show();
+
     std::string url = "rtsp://localhost:8554/bars";
 
     VideoHandler vhandler;
-    std::cout << cv::getBuildInformation() << std::endl;
-    vhandler.gstreamerDummyVideoCaptureAndShowInCV();
+    // vhandler.gstreamerDummyVideoCaptureAndShowInCV();
     // vhandler.gstreamerRTSPVideoCaptureAndShowInCV(url);
+    vhandler.gstreamerRTSPVideoCaptureAndShowInQt(url, label);
 
-    return 1;
+
+    return app.exec();
 }
 
 void VideoHandler::gstreamerDummyVideoCaptureAndShowInCV()
@@ -92,4 +97,37 @@ void VideoHandler::gstreamerRTSPVideoCaptureAndShowInCV(std::string url)
     }
 
     cv::destroyAllWindows();
+}
+
+void VideoHandler::gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel &label)
+{ 
+    std::string gst_str_capture = "rtspsrc location=" + url + " latency=200 "
+    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! queue "
+    "! appsink drop=1";
+
+    m_cap = std::make_shared<cv::VideoCapture>(gst_str_capture, cv::CAP_GSTREAMER);
+
+    if (!m_cap->isOpened()) 
+    {
+        qDebug() << "cap not open";
+        return;
+    }
+
+    m_timer = std::make_shared<QTimer>();
+    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
+    {
+        cv::Mat frame;
+        *m_cap >> frame;
+
+        if (frame.empty())
+        {
+            return;
+        }
+
+        // Convert the captured frame to QImage
+        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
+        label.setPixmap(QPixmap::fromImage(qImg));
+    });
+
+    m_timer->start(10);  // Update every 30 ms
 }
