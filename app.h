@@ -43,4 +43,10 @@ public:
     void gstreamerDummyVideoCaptureAndShowInCV();
     void gstreamerRTSPVideoCaptureAndShowInCV(std::string url);
     void gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel &label);
+    void gstreamerVideoCaptureAndWriterFromRtsp(std::string url, QLabel &label);
+    void gstreamerVideoCaptureAndWriterFromDummyRtsp(QLabel &label);
+    void gstreamerVideoCaptureAndWriterFromDummyTestSrc(QLabel &label);
+    void gstreamerMp4ViderWriterFromImage(std::string file_name, QLabel &label);
+    void gstreamerAviVideoCaptureAndWriterFromImage(std::string file_name, QLabel &label);
+
 };
