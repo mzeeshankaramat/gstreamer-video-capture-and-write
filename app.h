@@ -43,6 +43,7 @@ public:
     void gstreamerDummyVideoCaptureAndShowInCV();
     void gstreamerRTSPVideoCaptureAndShowInCV(std::string url);
     void gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel &label);
+    void gstreamerVideoCaptureAndWriteWebcam(QLabel &label);
     void gstreamerVideoCaptureAndWriterFromRtsp(std::string url, QLabel &label);
     void gstreamerVideoCaptureAndWriterFromDummyRtsp(QLabel &label);
     void gstreamerVideoCaptureAndWriterFromDummyTestSrc(QLabel &label);
