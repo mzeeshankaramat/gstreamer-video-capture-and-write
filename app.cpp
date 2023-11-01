@@ -23,6 +23,31 @@ int main(int argc, char *argv[])
     return app.exec();
 }
 
+void GStreamerVideoHandle::displayInQt()
+{
+    m_label.show();
+    m_timer = std::make_shared<QTimer>();
+
+    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
+    {
+        cv::Mat frame;
+        *m_cap >> frame;
+
+        if (frame.empty())
+        {
+            return;
+        }
+
+        m_writer->write(frame);
+
+        // Convert the captured frame to QImage
+        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
+        m_label.setPixmap(QPixmap::fromImage(qImg));
+    });
+
+    m_timer->start(10);  // Update every 30 ms
+}
+
 void GStreamerVideoHandle::gstreamerDummyVideoCaptureAndShowInCV()
 {
     std::string gst_str_capture = "videotestsrc ! appsink drop=1";
@@ -105,8 +130,6 @@ void GStreamerVideoHandle::gstreamerRTSPVideoCaptureAndShowInCV(std::string url)
 
 void GStreamerVideoHandle::gstreamerVideoCaptureAndWriteWebcam()
 {
-    m_label.show();
-
     std::string file_name = "output.mp4"; // Specify the output file name
 
     // use v4l2src argument device to use other than default camera
@@ -136,31 +159,11 @@ void GStreamerVideoHandle::gstreamerVideoCaptureAndWriteWebcam()
         return;
     }
 
-    m_timer = std::make_shared<QTimer>();
-    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
-    {
-        cv::Mat frame;
-        *m_cap >> frame;
-
-        if (frame.empty())
-        {
-            return;
-        }
-
-        m_writer->write(frame);
-
-        // Convert the captured frame to QImage
-        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        m_label.setPixmap(QPixmap::fromImage(qImg));
-    });
-
-    m_timer->start(10);  // Update every 30 ms
+    displayInQt();
 }
 
 void GStreamerVideoHandle::gstreamerRTSPVideoCaptureAndShowInQt(std::string url)
 { 
-    m_label.show();
-
     std::string gst_str_capture = "rtspsrc location=" + url + " latency=200 "
     "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720 ! queue "
     "! appsink drop=1";
@@ -173,30 +176,13 @@ void GStreamerVideoHandle::gstreamerRTSPVideoCaptureAndShowInQt(std::string url)
         return;
     }
 
-    m_timer = std::make_shared<QTimer>();
-    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
-    {
-        cv::Mat frame;
-        *m_cap >> frame;
-
-        if (frame.empty())
-        {
-            return;
-        }
-
-        // Convert the captured frame to QImage
-        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        m_label.setPixmap(QPixmap::fromImage(qImg));
-    });
-
-    m_timer->start(10);  // Update every 30 ms
+    displayInQt();
 }
 
 
 
 void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromRtsp(std::string url)
 {
-    m_label.show();
     // std::string m_url = "rtsp://admin:admin@192.168.219.156:1935"; 
     std::string file_name = "output.mp4"; // Specify the output file name
 
@@ -228,30 +214,11 @@ void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromRtsp(std::string ur
         return;
     }
 
-    m_timer = std::make_shared<QTimer>();
-    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
-    {
-        cv::Mat frame;
-        *m_cap >> frame;
-
-        if (frame.empty())
-        {
-            return;
-        }
-
-        m_writer->write(frame);
-
-        // Convert the captured frame to QImage
-        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        m_label.setPixmap(QPixmap::fromImage(qImg));
-    });
-
-    m_timer->start(10);  // Update every 30 ms
+    displayInQt();
 }
 
 void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromDummyRtsp()
 {
-    m_label.show();
     // dummy rtsp, service is running in background
     std::string url = "rtsp://localhost:8554/bars"; 
 
@@ -286,30 +253,11 @@ void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromDummyRtsp()
         return;
     }
 
-    m_timer = std::make_shared<QTimer>();
-    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
-    {
-        cv::Mat frame;
-        *m_cap >> frame;
-
-        if (frame.empty())
-        {
-            return;
-        }
-
-        m_writer->write(frame);
-
-        // Convert the captured frame to QImage
-        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        m_label.setPixmap(QPixmap::fromImage(qImg));
-    });
-
-    m_timer->start(10);  // Update every 30 ms
+    displayInQt();
 }
 
 void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromDummyTestSrc()
 {
-    m_label.show();
     // Specify the output file name
     std::string file_name = "test.mp4"; 
 
@@ -338,26 +286,7 @@ void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromDummyTestSrc()
         return;
     }
 
-
-    m_timer = std::make_shared<QTimer>();
-    QObject::connect(m_timer.get(), &QTimer::timeout, [&, this]()
-    {
-        cv::Mat frame;
-        *m_cap >> frame;
-
-        if (frame.empty())
-        {
-            return;
-        }
-
-        m_writer->write(frame);
-
-        // Convert the captured frame to QImage
-        QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        m_label.setPixmap(QPixmap::fromImage(qImg));
-    });
-
-    m_timer->start(10); 
+    displayInQt(); 
 }
 
 void GStreamerVideoHandle::gstreamerMp4ViderWriterFromImage(std::string imgName)
@@ -380,7 +309,7 @@ void GStreamerVideoHandle::gstreamerMp4ViderWriterFromImage(std::string imgName)
 
     if (image.empty())
     {
-        qDebug() << "!!!Could not open or find the image" << endl;
+        qDebug() << "Could not open or find the image" << endl;
         return;
     }
 
@@ -419,7 +348,7 @@ void GStreamerVideoHandle::gstreamerAviVideoCaptureAndWriterFromImage(std::strin
 
     if (image.empty())
     {
-        qDebug() << "!!!Could not open or find the image" << endl;
+        qDebug() << "Could not open or find the image" << endl;
         return;
     }
 
