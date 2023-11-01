@@ -1,26 +1,119 @@
 #include "app.h"
+#include <QVBoxLayout>
+
+std::string url = "rtsp://localhost:8554/bars";
+std::string fileName = "lena.bmp";
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    
-    std::string url = "rtsp://localhost:8554/bars";
-    std::string fileName = "lena.bmp";
-
-    GStreamerVideoHandle vhandler;
-
-    vhandler.gstreamerVideoCaptureAndWriteWebcam();
-    // vhandler.gstreamerDummyVideoCaptureAndShowInCV();
-    // vhandler.gstreamerRTSPVideoCaptureAndShowInCV(url);
-    // vhandler.gstreamerRTSPVideoCaptureAndShowInQt(url);
-    // vhandler.gstreamerVideoCaptureAndWriterFromRtsp(url);
-    // vhandler.gstreamerVideoCaptureAndWriterFromDummyRtsp();
-    // vhandler.gstreamerVideoCaptureAndWriterFromDummyTestSrc();
-    // vhandler.gstreamerMp4ViderWriterFromImage(fileName);
-    // vhandler.gstreamerAviVideoCaptureAndWriterFromImage(fileName);
-
-
+    MainWindow w;
+    w.show();
     return app.exec();
+}
+
+MainWindow::MainWindow(QWidget *parent)
+    : QWidget(parent)
+{
+    setWindowTitle("GStreamer Video Streamer");
+    QVBoxLayout *layout = new QVBoxLayout(this);
+
+    dummyVideoCaptureAndShowInCVButton = new QPushButton("Dummy Video Capture And Show In CV", this);
+    connect(dummyVideoCaptureAndShowInCVButton, &QPushButton::clicked, this, &MainWindow::onDummyVideoCaptureAndShowInCVClicked);
+    layout->addWidget(dummyVideoCaptureAndShowInCVButton);
+
+    videoCaptureAndWriteWebcamButton = new QPushButton("Webcam Capture and Show In Qt", this);
+    connect(videoCaptureAndWriteWebcamButton, &QPushButton::clicked, this, &MainWindow::onVideoCaptureAndWriteWebcam);
+    layout->addWidget(videoCaptureAndWriteWebcamButton);
+
+    videoCaptureFromRtspAndShowInCVButton = new QPushButton("Rtsp Video Capture and Show in CV", this);
+    connect(videoCaptureFromRtspAndShowInCVButton, &QPushButton::clicked, this, &MainWindow::onVideoCaptureFromRtspAndShowInCV);
+    layout->addWidget(videoCaptureFromRtspAndShowInCVButton);
+
+    videoCaptureAndWriterFromRtspButton = new QPushButton("Rtsp Video Capture and Write to File", this);
+    connect(videoCaptureAndWriterFromRtspButton, &QPushButton::clicked, this, &MainWindow::onVideoCaptureAndWriterFromRtsp);
+    layout->addWidget(videoCaptureAndWriterFromRtspButton);
+
+    videoCaptureAndWriterFromDummyRtspButton = new QPushButton("Dummy Rtsp Capture and Write to File", this);
+    connect(videoCaptureAndWriterFromDummyRtspButton, &QPushButton::clicked, this, &MainWindow::onVideoCaptureAndWriterFromDummyRtsp);
+    layout->addWidget(videoCaptureAndWriterFromDummyRtspButton);
+
+    videoCaptureAndWriterFromDummyTestSrcButton = new QPushButton("Dummy Test Source Capture and Write to File", this);
+    connect(videoCaptureAndWriterFromDummyTestSrcButton, &QPushButton::clicked, this, &MainWindow::onVideoCaptureAndWriterFromDummyTestSrc);
+    layout->addWidget(videoCaptureAndWriterFromDummyTestSrcButton);
+
+    mp4ViderWriterFromImageButton = new QPushButton("Mp4 Video Writer from Image", this);
+    connect(mp4ViderWriterFromImageButton, &QPushButton::clicked, this, &MainWindow::onMp4ViderWriterFromImage);
+    layout->addWidget(mp4ViderWriterFromImageButton);
+
+    aviVideoWriterFromImageButton = new QPushButton("Avi Video Writer from Image", this);
+    connect(aviVideoWriterFromImageButton, &QPushButton::clicked, this, &MainWindow::onAviVideoWriterFromImage);
+    layout->addWidget(aviVideoWriterFromImageButton);
+
+    setLayout(layout);
+}
+
+void MainWindow::onDummyVideoCaptureAndShowInCVClicked()
+{
+    vhandler.stop();
+    vhandler.gstreamerDummyVideoCaptureAndShowInCV();
+}
+
+void MainWindow::onVideoCaptureAndWriteWebcam()
+{
+    vhandler.stop();
+    vhandler.gstreamerVideoCaptureAndWriteWebcam();
+}
+
+void MainWindow::onVideoCaptureFromRtspAndShowInCV()
+{
+    vhandler.stop();
+    vhandler.gstreamerRTSPVideoCaptureAndShowInQt(url);
+}
+
+void MainWindow::onVideoCaptureAndWriterFromRtsp()
+{
+    vhandler.stop();
+    vhandler.gstreamerVideoCaptureAndWriterFromRtsp(url);
+}
+
+void MainWindow::onVideoCaptureAndWriterFromDummyRtsp()
+{
+    vhandler.stop();
+    vhandler.gstreamerVideoCaptureAndWriterFromDummyRtsp();
+}
+
+void MainWindow::onVideoCaptureAndWriterFromDummyTestSrc()
+{
+    vhandler.stop();
+    vhandler.gstreamerVideoCaptureAndWriterFromDummyTestSrc();
+}
+
+void MainWindow::onMp4ViderWriterFromImage()
+{
+    vhandler.stop();
+    vhandler.gstreamerMp4ViderWriterFromImage(fileName);
+}
+
+void MainWindow::onAviVideoWriterFromImage()
+{
+    vhandler.stop();
+    vhandler.gstreamerAviVideoCaptureAndWriterFromImage(fileName);
+}
+
+void GStreamerVideoHandle::stop()
+{
+    if (m_timer) {
+        m_timer->stop();
+    }
+
+    if (m_cap && m_cap->isOpened()) {
+        m_cap->release();
+    }
+
+    if (m_writer && m_writer->isOpened()) {
+        m_writer->release();
+    }
 }
 
 void GStreamerVideoHandle::gstreamerDummyVideoCaptureAndShowInCV()

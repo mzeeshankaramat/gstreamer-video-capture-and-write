@@ -22,6 +22,9 @@
 #include <QDebug>
 #include <opencv2/opencv.hpp>
 
+#include <QWidget>
+#include <QPushButton>
+
 class GStreamerVideoHandle
 {
 public:
@@ -43,6 +46,7 @@ public:
         if (m_cap && m_cap->isOpened()) m_cap->release();
     }
 
+    void stop();
     void gstreamerDummyVideoCaptureAndShowInCV();
     void gstreamerRTSPVideoCaptureAndShowInCV(std::string url);
     void gstreamerRTSPVideoCaptureAndShowInQt(std::string url);
@@ -53,4 +57,39 @@ public:
     void gstreamerMp4ViderWriterFromImage(std::string file_name);
     void gstreamerAviVideoCaptureAndWriterFromImage(std::string file_name);
 
+};
+
+class MainWindow : public QWidget
+{
+    Q_OBJECT
+
+public:
+    MainWindow(QWidget *parent = nullptr);
+    
+    ~MainWindow()
+    {
+
+    }
+
+private slots:
+    void onDummyVideoCaptureAndShowInCVClicked();
+    void onVideoCaptureAndWriteWebcam();
+    void onVideoCaptureFromRtspAndShowInCV();
+    void onVideoCaptureAndWriterFromRtsp();
+    void onVideoCaptureAndWriterFromDummyRtsp();
+    void onVideoCaptureAndWriterFromDummyTestSrc();
+    void onMp4ViderWriterFromImage();
+    void onAviVideoWriterFromImage();
+
+
+private:
+    GStreamerVideoHandle vhandler;
+    QPushButton *dummyVideoCaptureAndShowInCVButton;
+    QPushButton *videoCaptureAndWriteWebcamButton;
+    QPushButton *videoCaptureFromRtspAndShowInCVButton;
+    QPushButton *videoCaptureAndWriterFromRtspButton;
+    QPushButton *videoCaptureAndWriterFromDummyRtspButton;
+    QPushButton *videoCaptureAndWriterFromDummyTestSrcButton;
+    QPushButton *mp4ViderWriterFromImageButton;
+    QPushButton *aviVideoWriterFromImageButton;
 };
