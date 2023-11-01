@@ -45,21 +45,21 @@ $ docker pull zeeshankaramat25/gstreamer-opencv-docker
 ## Code Structure
 
 - `main()`: Entry point for the application. Initializes QT Application and invokes desired video handler methods.
-- `VideoHandler` Class: Contains various methods to handle video capture, display, and write operations using GStreamer and OpenCV.
+- `GStreamerVideoHandle` Class: Contains various methods to handle video capture, display, and write operations using GStreamer and OpenCV.
 
 ### Important Methods
 
 - `gstreamerDummyVideoCaptureAndShowInCV()`: Captures dummy video and displays it using OpenCV.
 - `gstreamerRTSPVideoCaptureAndShowInCV(std::string url)`: Captures RTSP stream and displays it using OpenCV.
-- `gstreamerVideoCaptureAndWriteWebcam(QLabel &label)`: Captures video from webcam and writes it to an MP4 file. Displays the captured video in a QT window.
-- `gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel &label)`: Captures RTSP stream and displays it in a QT window.
-- `gstreamerMp4ViderWriterFromImage(std::string imgName, QLabel &label)`: Converts a static image to an MP4 video file.
+- `gstreamerVideoCaptureAndWriteWebcam()`: Captures video from webcam and writes it to an MP4 file. Displays the captured video in a QT window.
+- `gstreamerRTSPVideoCaptureAndShowInQt(std::string url)`: Captures RTSP stream and displays it in a QT window.
+- `gstreamerMp4ViderWriterFromImage(std::string imgName)`: Converts a static image to an MP4 video file.
 
 ## Demo
 
 If you want to see this integration in action, follow the steps below:
 
-### Using `gstreamerVideoCaptureAndWriteWebcam(QLabel &label)`
+### Using `gstreamerVideoCaptureAndWriteWebcam()`
 
 1. **Setup**:
    - Ensure you have all the prerequisites installed or have the Docker image ready.
@@ -68,7 +68,7 @@ If you want to see this integration in action, follow the steps below:
 2. **Run the Application**:
    - Navigate to the root directory of this repository.
    - Compile the code, ensuring all the necessary libraries are linked.
-   - Run the main application. By default, this should trigger the `gstreamerVideoCaptureAndWriteWebcam(QLabel &label)` method.
+   - Run the main application. By default, this should trigger the `gstreamerVideoCaptureAndWriteWebcam()` method.
 
 3. **Perform the Demo**:
    - When you run the application, a QT window should appear showing the video feed from your webcam.

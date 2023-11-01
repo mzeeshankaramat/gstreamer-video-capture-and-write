@@ -1,32 +1,29 @@
-#pragma once
-
 #include "app.h"
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    QLabel label;
-    label.show();
-
+    
     std::string url = "rtsp://localhost:8554/bars";
     std::string fileName = "lena.bmp";
 
-    VideoHandler vhandler;
-    vhandler.gstreamerVideoCaptureAndWriteWebcam(label);
+    GStreamerVideoHandle vhandler;
+
+    vhandler.gstreamerVideoCaptureAndWriteWebcam();
     // vhandler.gstreamerDummyVideoCaptureAndShowInCV();
     // vhandler.gstreamerRTSPVideoCaptureAndShowInCV(url);
-    // vhandler.gstreamerRTSPVideoCaptureAndShowInQt(url, label);
-    // vhandler.gstreamerVideoCaptureAndWriterFromRtsp(url,label);
-    // vhandler.gstreamerVideoCaptureAndWriterFromDummyRtsp(label);
-    // vhandler.gstreamerVideoCaptureAndWriterFromDummyTestSrc(label);
-    // vhandler.gstreamerMp4ViderWriterFromImage(fileName, label);
-    // vhandler.gstreamerAviVideoCaptureAndWriterFromImage(fileName, label);
+    // vhandler.gstreamerRTSPVideoCaptureAndShowInQt(url);
+    // vhandler.gstreamerVideoCaptureAndWriterFromRtsp(url);
+    // vhandler.gstreamerVideoCaptureAndWriterFromDummyRtsp();
+    // vhandler.gstreamerVideoCaptureAndWriterFromDummyTestSrc();
+    // vhandler.gstreamerMp4ViderWriterFromImage(fileName);
+    // vhandler.gstreamerAviVideoCaptureAndWriterFromImage(fileName);
 
 
     return app.exec();
 }
 
-void VideoHandler::gstreamerDummyVideoCaptureAndShowInCV()
+void GStreamerVideoHandle::gstreamerDummyVideoCaptureAndShowInCV()
 {
     std::string gst_str_capture = "videotestsrc ! appsink drop=1";
 
@@ -65,10 +62,10 @@ void VideoHandler::gstreamerDummyVideoCaptureAndShowInCV()
     cv::destroyAllWindows();
 }
 
-void VideoHandler::gstreamerRTSPVideoCaptureAndShowInCV(std::string url)
+void GStreamerVideoHandle::gstreamerRTSPVideoCaptureAndShowInCV(std::string url)
 {
     std::string gst_str_capture = "rtspsrc location=" + url + " latency=200 "
-    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! queue "
+    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720 ! queue "
     "! appsink drop=1";
 
     m_cap = std::make_shared<cv::VideoCapture>(gst_str_capture, cv::CAP_GSTREAMER);
@@ -106,8 +103,10 @@ void VideoHandler::gstreamerRTSPVideoCaptureAndShowInCV(std::string url)
     cv::destroyAllWindows();
 }
 
-void VideoHandler::gstreamerVideoCaptureAndWriteWebcam(QLabel &label)
+void GStreamerVideoHandle::gstreamerVideoCaptureAndWriteWebcam()
 {
+    m_label.show();
+
     std::string file_name = "output.mp4"; // Specify the output file name
 
     // use v4l2src argument device to use other than default camera
@@ -152,16 +151,18 @@ void VideoHandler::gstreamerVideoCaptureAndWriteWebcam(QLabel &label)
 
         // Convert the captured frame to QImage
         QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        label.setPixmap(QPixmap::fromImage(qImg));
+        m_label.setPixmap(QPixmap::fromImage(qImg));
     });
 
     m_timer->start(10);  // Update every 30 ms
 }
 
-void VideoHandler::gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel &label)
+void GStreamerVideoHandle::gstreamerRTSPVideoCaptureAndShowInQt(std::string url)
 { 
+    m_label.show();
+
     std::string gst_str_capture = "rtspsrc location=" + url + " latency=200 "
-    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! queue "
+    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720 ! queue "
     "! appsink drop=1";
 
     m_cap = std::make_shared<cv::VideoCapture>(gst_str_capture, cv::CAP_GSTREAMER);
@@ -185,7 +186,7 @@ void VideoHandler::gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel 
 
         // Convert the captured frame to QImage
         QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        label.setPixmap(QPixmap::fromImage(qImg));
+        m_label.setPixmap(QPixmap::fromImage(qImg));
     });
 
     m_timer->start(10);  // Update every 30 ms
@@ -193,14 +194,14 @@ void VideoHandler::gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel 
 
 
 
-void VideoHandler::gstreamerVideoCaptureAndWriterFromRtsp(std::string url, QLabel &label)
+void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromRtsp(std::string url)
 {
-
+    m_label.show();
     // std::string m_url = "rtsp://admin:admin@192.168.219.156:1935"; 
     std::string file_name = "output.mp4"; // Specify the output file name
 
     std::string gst_str_capture = "rtspsrc location=" + url + " latency=200 "
-    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! queue "
+    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720 ! queue "
     "! appsink drop=1";
 
     m_cap = std::make_shared<cv::VideoCapture>(gst_str_capture, cv::CAP_GSTREAMER);
@@ -242,14 +243,15 @@ void VideoHandler::gstreamerVideoCaptureAndWriterFromRtsp(std::string url, QLabe
 
         // Convert the captured frame to QImage
         QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        label.setPixmap(QPixmap::fromImage(qImg));
+        m_label.setPixmap(QPixmap::fromImage(qImg));
     });
 
     m_timer->start(10);  // Update every 30 ms
 }
 
-void VideoHandler::gstreamerVideoCaptureAndWriterFromDummyRtsp(QLabel &label)
+void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromDummyRtsp()
 {
+    m_label.show();
     // dummy rtsp, service is running in background
     std::string url = "rtsp://localhost:8554/bars"; 
 
@@ -257,7 +259,7 @@ void VideoHandler::gstreamerVideoCaptureAndWriterFromDummyRtsp(QLabel &label)
     std::string file_name = "output.mp4"; 
 
     std::string gst_str_capture = "rtspsrc location=" + url + " latency=200 "
-    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! queue "
+    "! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720 ! queue "
     "! appsink drop=1";
 
     m_cap = std::make_shared<cv::VideoCapture>(gst_str_capture, cv::CAP_GSTREAMER);
@@ -299,19 +301,19 @@ void VideoHandler::gstreamerVideoCaptureAndWriterFromDummyRtsp(QLabel &label)
 
         // Convert the captured frame to QImage
         QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        label.setPixmap(QPixmap::fromImage(qImg));
+        m_label.setPixmap(QPixmap::fromImage(qImg));
     });
 
     m_timer->start(10);  // Update every 30 ms
 }
 
-void VideoHandler::gstreamerVideoCaptureAndWriterFromDummyTestSrc(QLabel &label)
+void GStreamerVideoHandle::gstreamerVideoCaptureAndWriterFromDummyTestSrc()
 {
-
+    m_label.show();
     // Specify the output file name
     std::string file_name = "test.mp4"; 
 
-    std::string gst_str_capture = "videotestsrc ! appsink drop=1";
+    std::string gst_str_capture = "videotestsrc ! videoscale ! video/x-raw,width=1280,height=720 ! appsink drop=1";
 
     m_cap = std::make_shared<cv::VideoCapture>(gst_str_capture, cv::CAP_GSTREAMER);
 
@@ -352,14 +354,15 @@ void VideoHandler::gstreamerVideoCaptureAndWriterFromDummyTestSrc(QLabel &label)
 
         // Convert the captured frame to QImage
         QImage qImg = QImage((const unsigned char *)(frame.data), frame.cols, frame.rows, QImage::Format_RGB888).rgbSwapped();
-        label.setPixmap(QPixmap::fromImage(qImg));
+        m_label.setPixmap(QPixmap::fromImage(qImg));
     });
 
     m_timer->start(10); 
 }
 
-void VideoHandler::gstreamerMp4ViderWriterFromImage(std::string imgName, QLabel &label)
+void GStreamerVideoHandle::gstreamerMp4ViderWriterFromImage(std::string imgName)
 {
+    m_label.show();
     std::string filePath = "resources/" + imgName;
     cv::Mat image = cv::imread(filePath);
     cv::Size input_size = image.size();
@@ -385,7 +388,7 @@ void VideoHandler::gstreamerMp4ViderWriterFromImage(std::string imgName, QLabel 
 
     // Convert the captured frame to QImage
     QImage qImg = QImage((const unsigned char *)(image.data), image.cols, image.rows, QImage::Format_RGB888).rgbSwapped();
-    label.setPixmap(QPixmap::fromImage(qImg));
+    m_label.setPixmap(QPixmap::fromImage(qImg));
 
     // Write the image to the video file multiple times
     for (int i = 0; i < num_frames; ++i) 
@@ -396,8 +399,9 @@ void VideoHandler::gstreamerMp4ViderWriterFromImage(std::string imgName, QLabel 
     qDebug() << "File: "<< QString::fromStdString(fileName) << "has been written" << endl;
 }
 
-void VideoHandler::gstreamerAviVideoCaptureAndWriterFromImage(std::string imgName, QLabel &label)
+void GStreamerVideoHandle::gstreamerAviVideoCaptureAndWriterFromImage(std::string imgName)
 {
+    m_label.show();
     std::string filePath = "resources/" + imgName;
     cv::Mat image = cv::imread(filePath);
     cv::Size input_size = image.size();
@@ -423,7 +427,7 @@ void VideoHandler::gstreamerAviVideoCaptureAndWriterFromImage(std::string imgNam
 
     // Convert the captured frame to QImage
     QImage qImg = QImage((const unsigned char *)(image.data), image.cols, image.rows, QImage::Format_RGB888).rgbSwapped();
-    label.setPixmap(QPixmap::fromImage(qImg));
+    m_label.setPixmap(QPixmap::fromImage(qImg));
 
     // Write the image to the video file multiple times
     for (int i = 0; i < num_frames; ++i) 

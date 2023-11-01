@@ -1,3 +1,5 @@
+#pragma once
+
 #include <QCoreApplication>
 #include <QSocketNotifier>
 #include <iostream>
@@ -20,20 +22,21 @@
 #include <QDebug>
 #include <opencv2/opencv.hpp>
 
-class VideoHandler
+class GStreamerVideoHandle
 {
 public:
     std::shared_ptr<cv::VideoCapture> m_cap;
     std::shared_ptr<cv::VideoWriter> m_writer;
     std::shared_ptr<QTimer> m_timer;
+    QLabel m_label;
 
 public:
-    VideoHandler()
+    GStreamerVideoHandle()
     {
-
+        m_label.setMinimumSize(1280, 720);
     }
 
-    ~VideoHandler()
+    ~GStreamerVideoHandle()
     {
         // Release resources if necessary
         if (m_writer && m_writer->isOpened()) m_writer->release();
@@ -42,12 +45,12 @@ public:
 
     void gstreamerDummyVideoCaptureAndShowInCV();
     void gstreamerRTSPVideoCaptureAndShowInCV(std::string url);
-    void gstreamerRTSPVideoCaptureAndShowInQt(std::string url, QLabel &label);
-    void gstreamerVideoCaptureAndWriteWebcam(QLabel &label);
-    void gstreamerVideoCaptureAndWriterFromRtsp(std::string url, QLabel &label);
-    void gstreamerVideoCaptureAndWriterFromDummyRtsp(QLabel &label);
-    void gstreamerVideoCaptureAndWriterFromDummyTestSrc(QLabel &label);
-    void gstreamerMp4ViderWriterFromImage(std::string file_name, QLabel &label);
-    void gstreamerAviVideoCaptureAndWriterFromImage(std::string file_name, QLabel &label);
+    void gstreamerRTSPVideoCaptureAndShowInQt(std::string url);
+    void gstreamerVideoCaptureAndWriteWebcam();
+    void gstreamerVideoCaptureAndWriterFromRtsp(std::string url);
+    void gstreamerVideoCaptureAndWriterFromDummyRtsp();
+    void gstreamerVideoCaptureAndWriterFromDummyTestSrc();
+    void gstreamerMp4ViderWriterFromImage(std::string file_name);
+    void gstreamerAviVideoCaptureAndWriterFromImage(std::string file_name);
 
 };
