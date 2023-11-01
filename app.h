@@ -30,6 +30,9 @@ public:
     std::shared_ptr<QTimer> m_timer;
     QLabel m_label;
 
+private:
+    void displayInQt();
+
 public:
     GStreamerVideoHandle()
     {
