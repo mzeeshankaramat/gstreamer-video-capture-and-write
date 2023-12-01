@@ -57,6 +57,10 @@ $ docker pull zeeshankaramat25/gstreamer-opencv-docker
 
 ## Demo
 
+### Qt App
+   - I have added qt based app that you can run to test different functions:
+   <img src=app.png width="680" height="300">
+
 If you want to see this integration in action, follow the steps below:
 
 ### Using `gstreamerVideoCaptureAndWriteWebcam()`
