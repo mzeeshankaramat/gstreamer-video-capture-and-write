@@ -1,16 +1,164 @@
 #include "app.h"
 #include <QVBoxLayout>
 
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQuickView>
+#include <QQmlContext>
+#include <gst/gst.h>
+#include <gst/video/videooverlay.h>
+#include <QMetaType>
+
+#include <QApplication>
+#include <QQmlApplicationEngine>
+#include <QQuickWindow>
+#include <QQuickItem>
+#include <QRunnable>
+#include <gst/gst.h>
+
+
+
 std::string url = "rtsp://localhost:8554/bars";
 std::string fileName = "lena.bmp";
 
+class SetPlaying : public QRunnable
+{
+public:
+  SetPlaying(GstElement *);
+  ~SetPlaying();
+
+  void run ();
+
+private:
+  GstElement * pipeline_;
+};
+
+SetPlaying::SetPlaying (GstElement * pipeline)
+{
+  this->pipeline_ = pipeline ? static_cast<GstElement *> (gst_object_ref (pipeline)) : NULL;
+}
+
+SetPlaying::~SetPlaying ()
+{
+  if (this->pipeline_)
+    gst_object_unref (this->pipeline_);
+}
+
+void
+SetPlaying::run ()
+{
+  if (this->pipeline_)
+    gst_element_set_state (this->pipeline_, GST_STATE_PLAYING);
+}
+
+
 int main(int argc, char *argv[])
 {
-    QApplication app(argc, argv);
-    MainWindow w;
-    w.show();
-    return app.exec();
+  int ret;
+
+  gst_init (&argc, &argv);
+
+  {
+    QGuiApplication app(argc, argv);
+
+    GstElement *pipeline = gst_pipeline_new (NULL);
+    GstElement *src = gst_element_factory_make ("videotestsrc", NULL);
+    GstElement *glupload = gst_element_factory_make ("glupload", NULL);
+    /* the plugin must be loaded before loading the qml file to register the
+     * GstGLVideoItem qml item */
+    GstElement *sink = gst_element_factory_make ("qmlglsink", NULL);
+
+    g_assert (src && glupload && sink);
+
+    gst_bin_add_many (GST_BIN (pipeline), src, glupload, sink, NULL);
+    gst_element_link_many (src, glupload, sink, NULL);
+
+    QQmlApplicationEngine engine;
+    engine.load(QUrl(QStringLiteral("qrc:/qml/main.qml")));
+
+    QQuickItem *videoItem;
+    QQuickWindow *rootObject;
+
+    /* find and set the videoItem on the sink */
+    rootObject = static_cast<QQuickWindow *> (engine.rootObjects().first());
+    videoItem = rootObject->findChild<QQuickItem *> ("videoItem");
+    g_assert (videoItem);
+    g_object_set(sink, "widget", videoItem, NULL);
+
+    rootObject->scheduleRenderJob (new SetPlaying (pipeline),
+        QQuickWindow::BeforeSynchronizingStage);
+
+    ret = app.exec();
+
+    gst_element_set_state (pipeline, GST_STATE_NULL);
+    gst_object_unref (pipeline);
+  }
+
+  gst_deinit ();
+
+  return ret;
 }
+
+
+// int main(int argc, char *argv[]) {
+
+//     qRegisterMetaType<_GstElement*>("_GstElement*");
+//     // Initialize Qt Application and GStreamer
+//     QGuiApplication app(argc, argv);
+//     gst_init(&argc, &argv);
+
+//     // Create a GStreamer pipeline
+//     // GstElement *pipeline = gst_parse_launch("rtspsrc location=rtsp://localhost:8554/bars ! rtph264depay ! h264parse ! vaapidecodebin ! qmlglsink name=sink", NULL);
+//     GstElement *pipeline = gst_parse_launch( "videotestsrc name=source ! glupload ! qmlglsink name=sink", NULL);
+
+//     GstElement *sink = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
+
+//     // Check for pipeline or sink creation failure
+//     if (!pipeline || !sink) {
+//         g_printerr("Not all elements could be created.\n");
+//         return -1;
+//     }
+
+//     // Setup QML engine
+//     QQmlApplicationEngine engine;
+//     // QQmlContext *context = engine.rootContext();
+
+//     // // Expose the sink to QML
+//     // context->setContextProperty("videoSink", QVariant::fromValue(sink));
+
+//     // Load QML file
+//     engine.load(QUrl(QStringLiteral("qrc:/qml/main.qml")));
+
+//     QQuickItem *videoItem;
+//     QQuickWindow *rootObject;
+
+//     /* find and set the videoItem on the sink */
+//     rootObject = static_cast<QQuickWindow *> (engine.rootObjects().first());
+//     videoItem = rootObject->findChild<QQuickItem *> ("videoItem");
+//     g_assert (videoItem);
+//     g_object_set(sink, "widget", videoItem, NULL);
+
+//     // rootObject->scheduleRenderJob (new SetPlaying (pipeline),
+//     //     QQuickWindow::BeforeSynchronizingStage);
+
+//     // Set the pipeline to the playing state
+//     gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+//     // Start the Qt application loop
+//     return app.exec();
+// }
+
+
+
+
+
+// int main(int argc, char *argv[])
+// {
+//     QApplication app(argc, argv);
+//     MainWindow w;
+//     w.show();
+//     return app.exec();
+// }
 
 MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)

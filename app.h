@@ -25,6 +25,7 @@
 #include <QWidget>
 #include <QPushButton>
 
+Q_DECLARE_METATYPE(_GstElement*)
 class GStreamerVideoHandle
 {
 public:
