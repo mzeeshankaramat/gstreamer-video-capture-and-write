@@ -12,7 +12,8 @@ find_package(PkgConfig)
 pkg_check_modules(GST REQUIRED gstreamer-1.0)
 pkg_check_modules(GST_VIDEO REQUIRED gstreamer-video-1.0)
 
-add_executable(gst-qt-app app.cpp app.h)
+# add_executable(gst-qt-app app.cpp app.h)
+add_executable(gst-qt-app test_pipeline.cpp)
 
 target_link_libraries(gst-qt-app Qt5::Widgets Qt5::Core ${GST_LIBRARIES} ${GST_VIDEO_LIBRARIES} ${OpenCV_LIBS} )
 target_include_directories(gst-qt-app PRIVATE ${GST_INCLUDE_DIRS} ${GST_VIDEO_INCLUDE_DIRS})
