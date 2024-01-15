@@ -175,7 +175,7 @@ int main (int argc, char *argv[]){
   /* Use convertor to convert from NV12 to RGBA as required by nvosd */
   nvvidconv2 = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter2");
 
-  fpsdisplaysink = gst_element_factory_make ("autovideosink", "fpsdisplaysink");
+  fpsdisplaysink = gst_element_factory_make ("fpsdisplaysink", "fpsdisplaysink");
 
   /* Use convertor to convert from NV12 to H264 as required */
   nvv4l2h264enc = gst_element_factory_make ("nvv4l2h264enc", "nvv4l2h264enc");
