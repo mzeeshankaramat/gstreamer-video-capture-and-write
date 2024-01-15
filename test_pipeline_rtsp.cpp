@@ -5,7 +5,10 @@
 #include <map>
 #include <iostream>
 #include <unordered_set>
-#include <chrono>  
+#include <chrono>
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+
 
 /* The muxer output resolution must be set if the input streams will be of
  * different resolution. The muxer will scale all the input frames to this
@@ -139,6 +142,14 @@ int main (int argc, char *argv[]){
   gst_init (&argc, &argv);
   loop = g_main_loop_new (NULL, FALSE);
 
+  QGuiApplication app(argc, argv);
+
+  QQmlApplicationEngine engine;
+  engine.load(QUrl(QStringLiteral("qrc:qml/main.qml")));
+
+  if (engine.rootObjects().isEmpty())
+      return -1;
+
   /* Create gstreamer elements */
   /* Create Pipeline element that will form a connection of other elements */
   pipeline = gst_pipeline_new ("deepstream_tutorial_app1");
@@ -175,7 +186,7 @@ int main (int argc, char *argv[]){
   /* Use convertor to convert from NV12 to RGBA as required by nvosd */
   nvvidconv2 = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter2");
 
-  fpsdisplaysink = gst_element_factory_make ("fpsdisplaysink", "fpsdisplaysink");
+  fpsdisplaysink = gst_element_factory_make ("autovideosink", "fpsdisplaysink");
 
   /* Use convertor to convert from NV12 to H264 as required */
   nvv4l2h264enc = gst_element_factory_make ("nvv4l2h264enc", "nvv4l2h264enc");

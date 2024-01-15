@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt5Widgets REQUIRED)
+find_package(Qt5 COMPONENTS Quick Qml REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
 
@@ -18,7 +19,7 @@ set(DEEPSTREAM_LIB_DIR /opt/nvidia/deepstream/deepstream/lib/libnvdsgst_meta.so)
 # add_executable(gst-qt-app app.cpp app.h)
 add_executable(gst-qt-app test_pipeline_rtsp.cpp)
 
-target_link_libraries(gst-qt-app Qt5::Widgets Qt5::Core ${GST_LIBRARIES} ${GST_VIDEO_LIBRARIES} ${OpenCV_LIBS} ${DEEPSTREAM_LIB_DIR})
+target_link_libraries(gst-qt-app Qt5::Widgets Qt5::Core Qt5::Quick Qt5::Qml ${GST_LIBRARIES} ${GST_VIDEO_LIBRARIES} ${OpenCV_LIBS} ${DEEPSTREAM_LIB_DIR})
 target_include_directories(gst-qt-app PRIVATE ${GST_INCLUDE_DIRS} ${GST_VIDEO_INCLUDE_DIRS} ${DEEPSTREAM_INCLUDE_DIR})
 target_compile_options(gst-qt-app PRIVATE ${GST_CFLAGS_OTHER})
 
