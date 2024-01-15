@@ -16,8 +16,12 @@ pkg_check_modules(GST_VIDEO REQUIRED gstreamer-video-1.0)
 set(DEEPSTREAM_INCLUDE_DIR /opt/nvidia/deepstream/deepstream/sources/includes)
 set(DEEPSTREAM_LIB_DIR /opt/nvidia/deepstream/deepstream/lib/libnvdsgst_meta.so)
 
+qt5_add_resources(RESOURCES qml/qml.qrc)
+
+add_executable(gst-qt-app test_pipeline_rtsp.cpp ${RESOURCES})
+
 # add_executable(gst-qt-app app.cpp app.h)
-add_executable(gst-qt-app test_pipeline_rtsp.cpp)
+# add_executable(gst-qt-app test_pipeline_rtsp.cpp)
 
 target_link_libraries(gst-qt-app Qt5::Widgets Qt5::Core Qt5::Quick Qt5::Qml ${GST_LIBRARIES} ${GST_VIDEO_LIBRARIES} ${OpenCV_LIBS} ${DEEPSTREAM_LIB_DIR})
 target_include_directories(gst-qt-app PRIVATE ${GST_INCLUDE_DIRS} ${GST_VIDEO_INCLUDE_DIRS} ${DEEPSTREAM_INCLUDE_DIR})

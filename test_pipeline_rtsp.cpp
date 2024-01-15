@@ -145,7 +145,7 @@ int main (int argc, char *argv[]){
   QGuiApplication app(argc, argv);
 
   QQmlApplicationEngine engine;
-  engine.load(QUrl(QStringLiteral("qrc:/qml/main.qml")));
+  engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
 
   if (engine.rootObjects().isEmpty())
       return -1;
@@ -348,5 +348,7 @@ int main (int argc, char *argv[]){
   gst_object_unref (GST_OBJECT (pipeline));
   g_source_remove (bus_watch_id);
   g_main_loop_unref (loop);
-  return 0;
+
+  gst_deinit();
+  return app.exec();
 }
