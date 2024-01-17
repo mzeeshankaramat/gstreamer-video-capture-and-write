@@ -151,15 +151,6 @@ exit:
   gst_object_unref(sink_pad);
 }
 
-
-// /* Callback function to handle new samples in appsink */
-// static GstFlowReturn your_frame_callback(GstElement *sink, VideoFrameImageProvider *provider) 
-// {
-//   // Extract frame, convert it, and update provider
-//   qDebug() << "!!!new_sample_callback";
-//   return GST_FLOW_OK;
-// }
-
 /* Callback function for new samples */
 static GstFlowReturn new_sample(GstElement *sink, VideoFrameImageProvider *provider) 
 {
@@ -200,11 +191,12 @@ int main (int argc, char *argv[]){
   GMainLoop *loop = NULL;
   GstElement *pipeline = NULL, *source = NULL, *rtph264depay = NULL, *h264parser = NULL, *nvv4l2h264enc = NULL, *qtdemux = NULL,
              *nvv4l2decoder = NULL, *streammux = NULL, *sink = NULL, *nvvidconv = NULL, *qtmux = NULL,
-             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL;
+             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL, *tee1 =NULL, *splitmuxsink = NULL, *queue1 = NULL, *queue2 = NULL, *nvvidconv3 = NULL;
 
   GstElement *transform = NULL;
   GstBus *bus = NULL;
   guint bus_watch_id;
+  GstCaps *caps,*caps1, *caps2, *caps3;
 
   gst_init (&argc, &argv);
   loop = g_main_loop_new (NULL, FALSE);
@@ -242,6 +234,8 @@ int main (int argc, char *argv[]){
 
   nvvidconv2 = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter2");
 
+  nvvidconv3 = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter3");
+
   videoconv = gst_element_factory_make("videoconvert", "video-convert");
 
   appsink = gst_element_factory_make ("appsink", "appsink");
@@ -254,10 +248,17 @@ int main (int argc, char *argv[]){
 
   sink = gst_element_factory_make ("filesink", "filesink");
 
+  tee1 = gst_element_factory_make("tee", "tee");
+
+  queue1 = gst_element_factory_make("queue", "queue1");
+  queue2 = gst_element_factory_make("queue", "queue2");
+
+  splitmuxsink = gst_element_factory_make("splitmuxsink", "splitmuxsink");
+
 
     if (!pipeline || !source || !h264parser || !rtph264depay ||
-      !nvv4l2decoder || !streammux || !pgie || !tracker || 
-      !nvvidconv || !nvosd || !nvvidconv2 || !videoconv || !appsink) {
+      !nvv4l2decoder || !streammux || !pgie || !tracker || !nvv4l2h264enc || !h264parser2 ||
+      !nvvidconv || !nvosd || !nvvidconv2 || !nvvidconv3 || !videoconv || !appsink || !tee1 || !queue1 || !queue2) {
     g_printerr ("One element could not be created. Exiting.\n");
     return -1;
   }
@@ -291,20 +292,19 @@ int main (int argc, char *argv[]){
 
   g_object_set(G_OBJECT(tracker), "ll-lib-file", "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so", NULL);
 
-  g_object_set (
-      G_OBJECT (sink),
-      "location", 
-      "output.mp4", 
-      NULL
-    );
+  g_object_set(splitmuxsink,
+    "location", "output_%05d.mp4",
+    "max-size-time", (guint64)(10 * GST_SECOND),
+    NULL);
 
   g_object_set(G_OBJECT(appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
-  // g_signal_connect(appsink, "new-sample", G_CALLBACK(your_frame_callback), provider);
 
-  // Set caps for nvvideoconvert and videoconvert
-  GstCaps *caps1, *caps2;
-  caps1 = gst_caps_from_string("video/x-raw, format=(string)BGRx");
-  caps2 = gst_caps_from_string("video/x-raw, format=BGR");
+  g_object_set(splitmuxsink, "location", "output_%05d.mp4", NULL);
+  
+  caps = gst_caps_from_string("video/x-raw, format=BGR");
+  caps1 = gst_caps_from_string("video/x-raw, width=1920, height=1080, format=I420");
+  caps2 = gst_caps_from_string("video/x-raw(memory:NVMM), format=NV12");
+  caps3 = gst_caps_from_string("video/x-h264, stream-format=byte-stream'");
 
   bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
   bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
@@ -323,8 +323,15 @@ int main (int argc, char *argv[]){
     nvvidconv, 
     nvosd,
     nvvidconv2,
+    nvvidconv3,
     videoconv,
+    tee1,
+    queue1,
+    queue2,
+    splitmuxsink,
     appsink,
+    h264parser2,
+    nvv4l2h264enc,
     NULL
   );
 
@@ -375,29 +382,72 @@ int main (int argc, char *argv[]){
     return -1;
   }
 
-  if (!gst_element_link_many (streammux, pgie, tracker, nvvidconv, nvosd, NULL)) {
-    g_printerr ("Rest of the pipeline elements could not be linked: 3. Exiting.\n");
+  if (!gst_element_link_many (streammux, pgie, tracker, nvvidconv, nvosd, nvvidconv2, tee1, NULL)) {
+    g_printerr("Failed to link elements up to tee.\n");
     return -1;
   }
 
-  if (!gst_element_link(nvosd, nvvidconv2)) {
-      g_printerr("Failed to link nvosd to nvvideoconvert.\n");
+  // Link the first branch (tee -> queue1 -> videoconvert -> appsink)
+  GstPad *tee_appsink_pad = gst_element_get_request_pad(tee1, "src_%u");
+  GstPad *queue1_sink_pad = gst_element_get_static_pad(queue1, "sink");
+  if (gst_pad_link(tee_appsink_pad, queue1_sink_pad) != GST_PAD_LINK_OK) 
+  {
+      g_printerr("Failed to link tee to queue1.\n");
       return -1;
   }
 
-  if (!gst_element_link_filtered(nvvidconv2, videoconv, caps1)) {
-    g_printerr("Failed to link nvvideoconvert to videoconvert with caps1.\n");
-    return -1;
-  }
+  gst_object_unref(queue1_sink_pad);
 
-  if (!gst_element_link_filtered(videoconv, appsink, caps2)) {
+  // Link the first branch (tee -> queue1 -> videoconvert -> appsink) with caps
+  if (!gst_element_link_filtered(queue1, videoconv, caps1)) {
+      g_printerr("Failed to link queue1 to videoconvert with caps1.\n");
+      return -1;
+  }
+  if (!gst_element_link_filtered(videoconv, appsink, caps)) {
       g_printerr("Failed to link videoconvert to appsink with caps2.\n");
       return -1;
   }
 
+  // Link the second branch (tee -> queue2 -> splitmuxsink)
+  GstPad *tee_splitmuxsink_pad = gst_element_get_request_pad(tee1, "src_%u");
+  GstPad *queue2_sink_pad = gst_element_get_static_pad(queue2, "sink");
+  if (gst_pad_link(tee_splitmuxsink_pad, queue2_sink_pad) != GST_PAD_LINK_OK) {
+      g_printerr("Failed to link tee to queue2.\n");
+      return -1;
+  }
+  gst_object_unref(queue2_sink_pad);
+  
+  if (!gst_element_link_filtered(queue2, nvvidconv3, caps1)) {
+      g_printerr("Failed to link queue2 to nvvidconv3 with caps1.\n");
+      return -1;
+  }
+
+  if (!gst_element_link_filtered(nvvidconv3, nvv4l2h264enc, caps2)) {
+      g_printerr("Failed to link nvvidconv3 to nvv4l2h264enc with caps2.\n");
+      return -1;
+  }
+  
+  // Link queue2 to the encoder
+  if (!gst_element_link_filtered(nvv4l2h264enc, h264parser2, caps3))  {
+      g_printerr("Failed to link nvv4l2h264enc to h264parser2.\n");
+      return -1;
+  }
+
+  // Link the parser to splitmuxsink
+  if (!gst_element_link(h264parser2, splitmuxsink)) {
+      g_printerr("Failed to link h264parser2 to splitmuxsink.\n");
+      return -1;
+  }
+
+  // Unref the request pads on the tee when no longer needed
+  gst_object_unref(tee_appsink_pad);
+  gst_object_unref(tee_splitmuxsink_pad);
+
   // Unreference the caps after linking
+  gst_caps_unref(caps);
   gst_caps_unref(caps1);
   gst_caps_unref(caps2);
+  gst_caps_unref(caps3);
 
   g_print ("Using file: %s\n", argv[1]);
   gst_element_set_state (pipeline, GST_STATE_PLAYING);
