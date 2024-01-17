@@ -10,6 +10,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickImageProvider>
 #include <QImage>
+#include <QDebug>
 
 
 #define MUXER_OUTPUT_WIDTH 1920
@@ -36,18 +37,20 @@ private:
     QImage currentFrame;
 };
 
-VideoFrameImageProvider::VideoFrameImageProvider()
-    : QQuickImageProvider(QQuickImageProvider::Image) {
+VideoFrameImageProvider::VideoFrameImageProvider() : QQuickImageProvider(QQuickImageProvider::Image) 
+{
+    QImage whiteImage(1920, 1080, QImage::Format_RGB888);
+    whiteImage.fill(Qt::black);
+    currentFrame = whiteImage;
 }
 
 QImage VideoFrameImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize) 
 {
-    QImage whiteImage(640, 480, QImage::Format_RGB888);
-    whiteImage.fill(Qt::black);
-    return whiteImage;
+    return currentFrame;
 }
 
-void VideoFrameImageProvider::updateFrame(const QImage &frame) {
+void VideoFrameImageProvider::updateFrame(const QImage &frame) 
+{
     currentFrame = frame;
     // Emit a signal or use some mechanism to notify QML to update the image.
 }
@@ -124,7 +127,8 @@ static GstPadProbeReturn osd_sink_pad_buffer_probe (GstPad * pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-void cb_new_pad (GstElement *src, GstPad *new_pad, gpointer data) {
+void cb_new_pad (GstElement *src, GstPad *new_pad, gpointer data) 
+{
   GstElement *depay = (GstElement *)data;
   GstPad *sink_pad = gst_element_get_static_pad(depay, "sink");
   GstPadLinkReturn ret;
@@ -147,16 +151,29 @@ exit:
   gst_object_unref(sink_pad);
 }
 
+
+// /* Callback function to handle new samples in appsink */
+// static GstFlowReturn your_frame_callback(GstElement *sink, VideoFrameImageProvider *provider) 
+// {
+//   // Extract frame, convert it, and update provider
+//   qDebug() << "!!!new_sample_callback";
+//   return GST_FLOW_OK;
+// }
+
 /* Callback function for new samples */
-static GstFlowReturn new_sample(GstElement *sink, VideoFrameImageProvider *provider) {
+static GstFlowReturn new_sample(GstElement *sink, VideoFrameImageProvider *provider) 
+{
+    // qDebug() << "new_sample_callback";
     GstSample *sample;
     GstBuffer *buffer;
     GstMapInfo map;
     QImage image;
+    GstFlowReturn ret;
 
     // Retrieve the buffer
     g_signal_emit_by_name(sink, "pull-sample", &sample);
-    if (!sample) {
+    if (!sample) 
+    {
         return GST_FLOW_ERROR;
     }
 
@@ -167,7 +184,8 @@ static GstFlowReturn new_sample(GstElement *sink, VideoFrameImageProvider *provi
         return GST_FLOW_ERROR;
     }
 
-    image = QImage(map.data, 640, 480, QImage::Format_RGB888);
+    image = QImage(map.data, 1920, 1080, QImage::Format_RGB888);
+    image = image.rgbSwapped();
     provider->updateFrame(image);
 
     gst_buffer_unmap(buffer, &map);
@@ -182,7 +200,7 @@ int main (int argc, char *argv[]){
   GMainLoop *loop = NULL;
   GstElement *pipeline = NULL, *source = NULL, *rtph264depay = NULL, *h264parser = NULL, *nvv4l2h264enc = NULL, *qtdemux = NULL,
              *nvv4l2decoder = NULL, *streammux = NULL, *sink = NULL, *nvvidconv = NULL, *qtmux = NULL,
-             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *fpsdisplaysink = NULL;
+             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL;
 
   GstElement *transform = NULL;
   GstBus *bus = NULL;
@@ -224,7 +242,9 @@ int main (int argc, char *argv[]){
 
   nvvidconv2 = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter2");
 
-  fpsdisplaysink = gst_element_factory_make ("fpsdisplaysink", "fpsdisplaysink");
+  videoconv = gst_element_factory_make("videoconvert", "video-convert");
+
+  appsink = gst_element_factory_make ("appsink", "appsink");
 
   nvv4l2h264enc = gst_element_factory_make ("nvv4l2h264enc", "nvv4l2h264enc");
 
@@ -237,7 +257,7 @@ int main (int argc, char *argv[]){
 
     if (!pipeline || !source || !h264parser || !rtph264depay ||
       !nvv4l2decoder || !streammux || !pgie || !tracker || 
-      !nvvidconv || !nvosd || !nvvidconv2 || !fpsdisplaysink) {
+      !nvvidconv || !nvosd || !nvvidconv2 || !videoconv || !appsink) {
     g_printerr ("One element could not be created. Exiting.\n");
     return -1;
   }
@@ -278,12 +298,13 @@ int main (int argc, char *argv[]){
       NULL
     );
 
-  g_object_set (
-      G_OBJECT (fpsdisplaysink),
-      "sync", 
-      false, 
-      NULL
-    );
+  g_object_set(G_OBJECT(appsink), "emit-signals", TRUE, "sync", FALSE, NULL);
+  // g_signal_connect(appsink, "new-sample", G_CALLBACK(your_frame_callback), provider);
+
+  // Set caps for nvvideoconvert and videoconvert
+  GstCaps *caps1, *caps2;
+  caps1 = gst_caps_from_string("video/x-raw, format=(string)BGRx");
+  caps2 = gst_caps_from_string("video/x-raw, format=BGR");
 
   bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
   bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
@@ -302,11 +323,13 @@ int main (int argc, char *argv[]){
     nvvidconv, 
     nvosd,
     nvvidconv2,
-    fpsdisplaysink,
+    videoconv,
+    appsink,
     NULL
   );
 
   g_signal_connect (source, "pad-added", G_CALLBACK (cb_new_pad), rtph264depay);
+  g_signal_connect(appsink, "new-sample", G_CALLBACK(new_sample), provider);
 
   if (!gst_element_link (rtph264depay, h264parser)) {
   g_printerr ("Failed to link rtph264depay to h264parser.\n");
@@ -352,10 +375,29 @@ int main (int argc, char *argv[]){
     return -1;
   }
 
-  if (!gst_element_link_many (streammux, pgie, tracker, nvvidconv, nvosd, nvvidconv2, fpsdisplaysink, NULL)) {
+  if (!gst_element_link_many (streammux, pgie, tracker, nvvidconv, nvosd, NULL)) {
     g_printerr ("Rest of the pipeline elements could not be linked: 3. Exiting.\n");
     return -1;
   }
+
+  if (!gst_element_link(nvosd, nvvidconv2)) {
+      g_printerr("Failed to link nvosd to nvvideoconvert.\n");
+      return -1;
+  }
+
+  if (!gst_element_link_filtered(nvvidconv2, videoconv, caps1)) {
+    g_printerr("Failed to link nvvideoconvert to videoconvert with caps1.\n");
+    return -1;
+  }
+
+  if (!gst_element_link_filtered(videoconv, appsink, caps2)) {
+      g_printerr("Failed to link videoconvert to appsink with caps2.\n");
+      return -1;
+  }
+
+  // Unreference the caps after linking
+  gst_caps_unref(caps1);
+  gst_caps_unref(caps2);
 
   g_print ("Using file: %s\n", argv[1]);
   gst_element_set_state (pipeline, GST_STATE_PLAYING);
