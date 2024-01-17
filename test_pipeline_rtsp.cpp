@@ -191,7 +191,7 @@ int main (int argc, char *argv[]){
   GMainLoop *loop = NULL;
   GstElement *pipeline = NULL, *source = NULL, *rtph264depay = NULL, *h264parser = NULL, *nvv4l2h264enc = NULL, *qtdemux = NULL,
              *nvv4l2decoder = NULL, *streammux = NULL, *sink = NULL, *nvvidconv = NULL, *qtmux = NULL,
-             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL, *tee1 =NULL, *splitmuxsink = NULL, *queue1 = NULL, *queue2 = NULL, *nvvidconv3 = NULL;
+             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL, *tee_raw = NULL, *queue_raw = NULL, *tee1 =NULL, *splitmuxsink = NULL, *queue1 = NULL, *queue2 = NULL, *nvvidconv3 = NULL;
 
   GstElement *transform = NULL;
   GstBus *bus = NULL;
@@ -250,6 +250,10 @@ int main (int argc, char *argv[]){
 
   tee1 = gst_element_factory_make("tee", "tee");
 
+  tee_raw = gst_element_factory_make("tee", "tee_raw");
+
+  queue_raw = gst_element_factory_make("queue", "queue_raw");
+
   queue1 = gst_element_factory_make("queue", "queue1");
   queue2 = gst_element_factory_make("queue", "queue2");
 
@@ -258,7 +262,7 @@ int main (int argc, char *argv[]){
 
     if (!pipeline || !source || !h264parser || !rtph264depay ||
       !nvv4l2decoder || !streammux || !pgie || !tracker || !nvv4l2h264enc || !h264parser2 ||
-      !nvvidconv || !nvosd || !nvvidconv2 || !nvvidconv3 || !videoconv || !appsink || !tee1 || !queue1 || !queue2) {
+      !nvvidconv || !nvosd || !nvvidconv2 || !nvvidconv3 || !videoconv || !appsink || !tee_raw || !tee1 || !queue_raw || !queue1 || !queue2) {
     g_printerr ("One element could not be created. Exiting.\n");
     return -1;
   }
@@ -316,6 +320,8 @@ int main (int argc, char *argv[]){
     source,
     rtph264depay,
     h264parser,
+    tee_raw,
+    queue_raw,
     nvv4l2decoder,
     streammux, 
     pgie,
@@ -338,8 +344,8 @@ int main (int argc, char *argv[]){
   g_signal_connect (source, "pad-added", G_CALLBACK (cb_new_pad), rtph264depay);
   g_signal_connect(appsink, "new-sample", G_CALLBACK(new_sample), provider);
 
-  if (!gst_element_link (rtph264depay, h264parser)) {
-  g_printerr ("Failed to link rtph264depay to h264parser.\n");
+  if (!gst_element_link_many (rtph264depay, h264parser, tee_raw, NULL)) {
+  g_printerr ("Failed to link rtph264depay to h264parser and tee.\n");
   return -1;
   }
 
@@ -376,8 +382,7 @@ int main (int argc, char *argv[]){
   gst_object_unref (osd_sink_pad);
 
 
-
-  if (!gst_element_link_many (h264parser, nvv4l2decoder, NULL)) {
+  if (!gst_element_link_many (queue_raw, nvv4l2decoder, NULL)) {
     g_printerr ("H264Parse and NvV4l2-Decoder could not be linked: 2. Exiting.\n");
     return -1;
   }
@@ -386,6 +391,14 @@ int main (int argc, char *argv[]){
     g_printerr("Failed to link elements up to tee.\n");
     return -1;
   }
+
+  GstPad *tee_raw_pad = gst_element_get_request_pad(tee_raw, "src_%u");
+  GstPad *queue_raw_sink_pad = gst_element_get_static_pad(queue_raw, "sink");
+  if (gst_pad_link(tee_raw_pad, queue_raw_sink_pad) != GST_PAD_LINK_OK) {
+      g_printerr("Failed to link tee to saving branch.\n");
+      return -1;
+  }
+  gst_object_unref(queue_raw_sink_pad);
 
   // Link the first branch (tee -> queue1 -> videoconvert -> appsink)
   GstPad *tee_appsink_pad = gst_element_get_request_pad(tee1, "src_%u");
