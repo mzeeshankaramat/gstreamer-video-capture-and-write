@@ -7,6 +7,20 @@ ApplicationWindow {
     height: 480
     title: "GStreamer Video"
 
-    // Define where the video should be displayed
-    // This could be a custom QtQuick item that interfaces with your GStreamer sink
+    Timer {
+            interval: 30 // Update every 30 milliseconds (adjust as needed for your application)
+            running: true
+            repeat: true
+            onTriggered: {
+                var uniqueId = Date.now().toString();
+                liveDisplay.source = "image://videoframes/live.png?id=" + uniqueId;
+            }
+        }
+
+        Image {
+            id: liveDisplay
+            anchors.fill: parent
+            source: "image://videoframes/live.png" // Get the video frames from C++ backend
+            fillMode: Image.PreserveAspectFit
+        }
 }

@@ -8,16 +8,14 @@
 #include <chrono>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQuickImageProvider>
+#include <QImage>
 
 
-/* The muxer output resolution must be set if the input streams will be of
- * different resolution. The muxer will scale all the input frames to this
- * resolution. */
 #define MUXER_OUTPUT_WIDTH 1920
 #define MUXER_OUTPUT_HEIGHT 1080
 
-/* Muxer batch formation timeout, for e.g. 40 millisec. Should ideally be set
- * based on the fastest source's framerate. */
+
 #define MUXER_BATCH_TIMEOUT_USEC 40000
 #define IGNORE_THRESHOLD_SEC 5  // 5 seconds threshold
 
@@ -27,6 +25,32 @@ guint64 frameCount = 0;
 std::chrono::steady_clock::time_point start_time;
 int frameCounter = 0;
 const int FRAME_INTERVAL = 30;  // compute FPS every 30 frames for instance
+
+class VideoFrameImageProvider : public QQuickImageProvider {
+public:
+    VideoFrameImageProvider();
+    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
+
+    void updateFrame(const QImage &frame);
+private:
+    QImage currentFrame;
+};
+
+VideoFrameImageProvider::VideoFrameImageProvider()
+    : QQuickImageProvider(QQuickImageProvider::Image) {
+}
+
+QImage VideoFrameImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize) 
+{
+    QImage whiteImage(640, 480, QImage::Format_RGB888);
+    whiteImage.fill(Qt::black);
+    return whiteImage;
+}
+
+void VideoFrameImageProvider::updateFrame(const QImage &frame) {
+    currentFrame = frame;
+    // Emit a signal or use some mechanism to notify QML to update the image.
+}
 
 static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data) {
     GMainLoop *loop = (GMainLoop *)data;
@@ -82,18 +106,15 @@ static GstPadProbeReturn osd_sink_pad_buffer_probe (GstPad * pad, GstPadProbeInf
             NvDsObjectMeta *obj = (NvDsObjectMeta *) elem->data;
             obj->text_params.display_text = NULL;  // Remove the display text.
 
-            // In the first 400 frames (which is approx. 13.3 seconds for 30fps videos), record the object IDs.
             if (frameCount <= 30) {
                 initialObjectIds.insert(obj->object_id);
             }
 
-            // If the object was detected in the first 400 frames or it's not class 7, then hide the bounding box.
             if (initialObjectIds.count(obj->object_id) > 0 || obj->class_id != 7) {
                 obj->rect_params.border_color.alpha = 0;
                 continue;
             } 
 
-            // Otherwise, for objects of class_id 7 detected after the first 400 frames:
             obj->rect_params.border_color.red = 1.0;
             obj->rect_params.border_color.green = 1.0;
             obj->rect_params.border_color.blue = 0.0;
@@ -126,6 +147,35 @@ exit:
   gst_object_unref(sink_pad);
 }
 
+/* Callback function for new samples */
+static GstFlowReturn new_sample(GstElement *sink, VideoFrameImageProvider *provider) {
+    GstSample *sample;
+    GstBuffer *buffer;
+    GstMapInfo map;
+    QImage image;
+
+    // Retrieve the buffer
+    g_signal_emit_by_name(sink, "pull-sample", &sample);
+    if (!sample) {
+        return GST_FLOW_ERROR;
+    }
+
+    // Get the buffer data
+    buffer = gst_sample_get_buffer(sample);
+    if (!gst_buffer_map(buffer, &map, GST_MAP_READ)) {
+        gst_sample_unref(sample);
+        return GST_FLOW_ERROR;
+    }
+
+    image = QImage(map.data, 640, 480, QImage::Format_RGB888);
+    provider->updateFrame(image);
+
+    gst_buffer_unmap(buffer, &map);
+    gst_sample_unref(sample);
+
+    return GST_FLOW_OK;
+}
+
 
 int main (int argc, char *argv[]){
 
@@ -138,60 +188,46 @@ int main (int argc, char *argv[]){
   GstBus *bus = NULL;
   guint bus_watch_id;
 
-  /* Standard GStreamer initialization */
   gst_init (&argc, &argv);
   loop = g_main_loop_new (NULL, FALSE);
 
   QGuiApplication app(argc, argv);
 
   QQmlApplicationEngine engine;
+  VideoFrameImageProvider *provider = new VideoFrameImageProvider();
+  engine.addImageProvider(QLatin1String("videoframes"), provider);
+
   engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
 
   if (engine.rootObjects().isEmpty())
       return -1;
 
-  /* Create gstreamer elements */
-  /* Create Pipeline element that will form a connection of other elements */
   pipeline = gst_pipeline_new ("deepstream_tutorial_app1");
 
-  /* Input File source element */
-  // source = gst_element_factory_make ("filesrc", "file-source");
   source = gst_element_factory_make ("rtspsrc", "rtsp-source");
 
   rtph264depay = gst_element_factory_make ("rtph264depay", "rtph264depay");
 
-  /* Since the data format in the input file is elementary h264 stream,
-   * we need a h264parser */
   h264parser = gst_element_factory_make ("h264parse", "h264-parser");
 
-  /* Use nvdec_h264 for hardware accelerated decode on GPU */
   nvv4l2decoder = gst_element_factory_make ("nvv4l2decoder", "nvv4l2-decoder");
 
-  /* Create nvstreammux instance to form batches from one or more sources. */
   streammux = gst_element_factory_make ("nvstreammux", "stream-muxer");
 
-  /* Use nvinfer to run inferencing on decoder's output,
-   * behaviour of inferencing is set through config file */
   pgie = gst_element_factory_make ("nvinfer", "primary-nvinference-engine");
 
-  /* Assigns track ids to detected bounding boxes*/
   tracker = gst_element_factory_make ("nvtracker", "tracker");
 
-  /* Use convertor to convert from NV12 to RGBA as required by nvosd */
   nvvidconv = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter");
 
-  /* Create OSD to draw on the converted RGBA buffer */
   nvosd = gst_element_factory_make ("nvdsosd", "nv-onscreendisplay");
 
-  /* Use convertor to convert from NV12 to RGBA as required by nvosd */
   nvvidconv2 = gst_element_factory_make ("nvvideoconvert", "nvvideo-converter2");
 
-  fpsdisplaysink = gst_element_factory_make ("autovideosink", "fpsdisplaysink");
+  fpsdisplaysink = gst_element_factory_make ("fpsdisplaysink", "fpsdisplaysink");
 
-  /* Use convertor to convert from NV12 to H264 as required */
   nvv4l2h264enc = gst_element_factory_make ("nvv4l2h264enc", "nvv4l2h264enc");
 
-  /* Since the data format for the output file is elementary h264 stream, * we need a h264parser */
   h264parser2 = gst_element_factory_make ("h264parse", "h264parser2");
 
   qtmux = gst_element_factory_make ("qtmux", "qtmux");
@@ -206,8 +242,6 @@ int main (int argc, char *argv[]){
     return -1;
   }
 
-
-  /* we set the input filename to the source element */
   g_object_set (
     G_OBJECT (source), 
     "location", 
@@ -237,7 +271,6 @@ int main (int argc, char *argv[]){
 
   g_object_set(G_OBJECT(tracker), "ll-lib-file", "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so", NULL);
 
-  /* Set output file location */
   g_object_set (
       G_OBJECT (sink),
       "location", 
@@ -252,14 +285,11 @@ int main (int argc, char *argv[]){
       NULL
     );
 
-  /* we add a message handler */
   bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
   bus_watch_id = gst_bus_add_watch (bus, bus_call, loop);
   gst_object_unref (bus);
 
 
-  /* Set up the pipeline */
-  /* we add all elements into the pipeline */
   gst_bin_add_many (
     GST_BIN (pipeline),
     source,
@@ -276,10 +306,8 @@ int main (int argc, char *argv[]){
     NULL
   );
 
-  /* Connect the pad-added signal for the rtspsrc */
   g_signal_connect (source, "pad-added", G_CALLBACK (cb_new_pad), rtph264depay);
 
-  /* Link rtph264depay to h264parser */
   if (!gst_element_link (rtph264depay, h264parser)) {
   g_printerr ("Failed to link rtph264depay to h264parser.\n");
   return -1;
@@ -296,27 +324,23 @@ int main (int argc, char *argv[]){
   gchar pad_name_sink[16] = "sink_0";
   gchar pad_name_src[16] = "src";
 
-  /* Dynamically created pad */
   sinkpad = gst_element_get_request_pad (streammux, pad_name_sink);
   if (!sinkpad) {
     g_printerr ("Streammux request sink pad failed. Exiting.\n");
     return -1;
   }
 
-  /* Statically created pad */
   srcpad = gst_element_get_static_pad (nvv4l2decoder, pad_name_src);
   if (!srcpad) {
     g_printerr ("Decoder request src pad failed. Exiting.\n");
     return -1;
   }
 
-  /* Linking the pads */
   if (gst_pad_link (srcpad, sinkpad) != GST_PAD_LINK_OK) {
       g_printerr ("Failed to link decoder to stream muxer. Exiting.\n");
       return -1;
   }
 
-  /* Unreference the object */
   gst_object_unref (sinkpad);
   gst_object_unref (srcpad);
   gst_object_unref (osd_sink_pad);
@@ -333,15 +357,12 @@ int main (int argc, char *argv[]){
     return -1;
   }
 
-  /* Set the pipeline to "playing" state */
   g_print ("Using file: %s\n", argv[1]);
   gst_element_set_state (pipeline, GST_STATE_PLAYING);
 
-  /* Wait till pipeline encounters an error or EOS */
   g_print ("Running...\n");
   g_main_loop_run (loop);
 
-  /* Out of the main loop, clean up nicely */
   g_print ("Returned, stopping playback\n");
   gst_element_set_state (pipeline, GST_STATE_NULL);
   g_print ("Deleting pipeline\n");
