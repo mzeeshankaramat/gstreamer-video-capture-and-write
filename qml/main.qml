@@ -23,4 +23,14 @@ ApplicationWindow {
             source: "image://videoframes/live.png" // Get the video frames from C++ backend
             fillMode: Image.PreserveAspectFit
         }
+
+        Button {
+            id: recordButton
+            anchors.horizontalCenter : parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            text: "Toggle Recording"
+            onClicked: {
+                text = "Hello G"
+            }
+        }
 }

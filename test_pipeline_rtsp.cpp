@@ -10,7 +10,12 @@
 #include <QQmlApplicationEngine>
 #include <QQuickImageProvider>
 #include <QImage>
+#include <QObject>
 #include <QDebug>
+#include <QQmlContext>
+#include <QTimer>
+#include <QDateTime>
+#include "test_pipeline_rtsp.moc"
 
 
 #define MUXER_OUTPUT_WIDTH 1920
@@ -53,6 +58,53 @@ void VideoFrameImageProvider::updateFrame(const QImage &frame)
 {
     currentFrame = frame;
     // Emit a signal or use some mechanism to notify QML to update the image.
+}
+
+static void on_eos(GstElement* sink, gpointer user_data) {
+    g_print("EOS received on sink\n");
+    // Flag or logic to indicate that it's safe to set the bin state to NULL
+    // ...
+}
+
+static bool isRecording = false;
+
+static void toggleRecording(GstElement *recording_bin)
+{
+  GstElement *splitmux = gst_bin_get_by_name(GST_BIN(recording_bin), "splitmuxsink");
+  // Start recording
+  if (!isRecording)
+  {
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString filenamePattern = QString("recording_%1_%05d.mp4").arg(timestamp);
+
+    // Convert QString to std::string (if needed)
+    std::string filenamePattern_std = filenamePattern.toStdString();
+
+    
+
+    // Set the location property of the splitmuxsink to use the pattern
+    g_object_set(splitmux, "location", filenamePattern_std.c_str(), NULL);
+    gst_element_set_state(recording_bin, GST_STATE_PLAYING);
+    g_print("Recording started\n");
+    isRecording = true;
+  }
+  else
+  {
+
+    g_signal_emit_by_name(splitmux, "split-now");
+    g_usleep(100000); 
+
+    // GstElement *rec_queue = gst_bin_get_by_name(GST_BIN(recording_bin), "queue2");
+
+    // // Send EOS (End Of Stream) to the pipeline
+    // GstPad* sink_pad = gst_element_get_static_pad(rec_queue, "sink");
+    // gst_pad_send_event(sink_pad, gst_event_new_eos());
+    // gst_object_unref(sink_pad);  // Unreference the sink pad after use
+
+    gst_element_set_state(recording_bin, GST_STATE_NULL);
+    g_print("Recording STOPPED\n");
+    isRecording = false;
+  }
 }
 
 static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data) {
@@ -185,18 +237,26 @@ static GstFlowReturn new_sample(GstElement *sink, VideoFrameImageProvider *provi
     return GST_FLOW_OK;
 }
 
+static GstFlowReturn new_record(GstElement *sink) 
+{
+    qDebug() << "new_RECORD_callback";
+    // gst_element_set_state(sink, GST_STATE_PAUSED);
+
+    return GST_FLOW_OK;
+}
+
 
 int main (int argc, char *argv[]){
 
   GMainLoop *loop = NULL;
   GstElement *pipeline = NULL, *source = NULL, *rtph264depay = NULL, *h264parser = NULL, *nvv4l2h264enc = NULL, *qtdemux = NULL,
              *nvv4l2decoder = NULL, *streammux = NULL, *sink = NULL, *nvvidconv = NULL, *qtmux = NULL,
-             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL, *tee1 =NULL, *splitmuxsink = NULL, *queue1 = NULL, *queue2 = NULL, *nvvidconv3 = NULL;
+             *pgie = NULL, *tracker = NULL, *nvvidconv2 = NULL, *nvosd = NULL, *h264parser2 = NULL, *videoconv = NULL, *appsink = NULL, *tee1 =NULL, *splitmuxsink = NULL, *queue1 = NULL, *queue2 = NULL, *nvvidconv3 = NULL, *recording_bin =  NULL;
 
   GstElement *transform = NULL;
   GstBus *bus = NULL;
   guint bus_watch_id;
-  GstCaps *caps,*caps1, *caps2, *caps3;
+  GstCaps *caps, *caps1, *caps2, *caps3;
 
   gst_init (&argc, &argv);
   loop = g_main_loop_new (NULL, FALSE);
@@ -211,6 +271,13 @@ int main (int argc, char *argv[]){
 
   if (engine.rootObjects().isEmpty())
       return -1;
+
+  QTimer *timer = new QTimer();
+  // timer->setSingleShot(true);    
+  QObject::connect(timer, &QTimer::timeout, [&](){
+        toggleRecording(recording_bin);
+    });
+  timer->start(15000);
 
   pipeline = gst_pipeline_new ("deepstream_tutorial_app1");
 
@@ -251,13 +318,15 @@ int main (int argc, char *argv[]){
   tee1 = gst_element_factory_make("tee", "tee");
 
   queue1 = gst_element_factory_make("queue", "queue1");
+
+  recording_bin = gst_bin_new("recording_bin");
+
   queue2 = gst_element_factory_make("queue", "queue2");
 
   splitmuxsink = gst_element_factory_make("splitmuxsink", "splitmuxsink");
 
-
     if (!pipeline || !source || !h264parser || !rtph264depay ||
-      !nvv4l2decoder || !streammux || !pgie || !tracker || !nvv4l2h264enc || !h264parser2 ||
+      !nvv4l2decoder || !streammux || !pgie || !tracker || !nvv4l2h264enc || !h264parser2 || !recording_bin || 
       !nvvidconv || !nvosd || !nvvidconv2 || !nvvidconv3 || !videoconv || !appsink || !tee1 || !queue1 || !queue2) {
     g_printerr ("One element could not be created. Exiting.\n");
     return -1;
@@ -266,7 +335,7 @@ int main (int argc, char *argv[]){
   g_object_set (
     G_OBJECT (source), 
     "location", 
-    "rtsp://admin:BTS123456@192.168.100.99:554", 
+    "rtsp://admin:BTS123456@192.168.16.99:554", 
     NULL
   );
 
@@ -323,20 +392,16 @@ int main (int argc, char *argv[]){
     nvvidconv, 
     nvosd,
     nvvidconv2,
-    nvvidconv3,
     videoconv,
     tee1,
     queue1,
-    queue2,
-    splitmuxsink,
     appsink,
-    h264parser2,
-    nvv4l2h264enc,
     NULL
   );
 
   g_signal_connect (source, "pad-added", G_CALLBACK (cb_new_pad), rtph264depay);
   g_signal_connect(appsink, "new-sample", G_CALLBACK(new_sample), provider);
+  // g_signal_connect(splitmuxsink, "split-now", G_CALLBACK(new_record), NULL);
 
   if (!gst_element_link (rtph264depay, h264parser)) {
   g_printerr ("Failed to link rtph264depay to h264parser.\n");
@@ -375,8 +440,6 @@ int main (int argc, char *argv[]){
   gst_object_unref (srcpad);
   gst_object_unref (osd_sink_pad);
 
-
-
   if (!gst_element_link_many (h264parser, nvv4l2decoder, NULL)) {
     g_printerr ("H264Parse and NvV4l2-Decoder could not be linked: 2. Exiting.\n");
     return -1;
@@ -408,14 +471,24 @@ int main (int argc, char *argv[]){
       return -1;
   }
 
-  // Link the second branch (tee -> queue2 -> splitmuxsink)
-  GstPad *tee_splitmuxsink_pad = gst_element_get_request_pad(tee1, "src_%u");
-  GstPad *queue2_sink_pad = gst_element_get_static_pad(queue2, "sink");
-  if (gst_pad_link(tee_splitmuxsink_pad, queue2_sink_pad) != GST_PAD_LINK_OK) {
-      g_printerr("Failed to link tee to queue2.\n");
-      return -1;
+  gst_bin_add_many(GST_BIN(recording_bin), queue2, nvvidconv3, nvv4l2h264enc, h264parser2, splitmuxsink, NULL);
+
+  // Create a ghost pad for the tee's src pad in bin1
+  GstPad* tee_src_pad = gst_element_get_request_pad(tee1, "src_%u");
+  GstPad* ghost_pad_for_tee = gst_ghost_pad_new("src", tee_src_pad);
+  gst_element_add_pad(pipeline, ghost_pad_for_tee);
+  gst_object_unref(tee_src_pad); // Unref the original pad, now that it's ghosted
+
+  // Create a ghost pad for the queue's sink pad in bin2
+  GstPad* queue_sink_pad = gst_element_get_static_pad(queue2, "sink");
+  GstPad* ghost_pad_for_queue = gst_ghost_pad_new("sink", queue_sink_pad);
+  gst_element_add_pad(recording_bin, ghost_pad_for_queue);
+  gst_object_unref(queue_sink_pad); // Unref the original pad
+
+  // Now link the ghost pads, which effectively links the tee to the queue across bins
+  if (gst_pad_link(ghost_pad_for_tee, ghost_pad_for_queue) != GST_PAD_LINK_OK) {
+      g_error("Failed to link tee and queue across bins");
   }
-  gst_object_unref(queue2_sink_pad);
   
   if (!gst_element_link_filtered(queue2, nvvidconv3, caps1)) {
       g_printerr("Failed to link queue2 to nvvidconv3 with caps1.\n");
@@ -441,7 +514,6 @@ int main (int argc, char *argv[]){
 
   // Unref the request pads on the tee when no longer needed
   gst_object_unref(tee_appsink_pad);
-  gst_object_unref(tee_splitmuxsink_pad);
 
   // Unreference the caps after linking
   gst_caps_unref(caps);
